@@ -1,4 +1,4 @@
 [core]
-    remote = myremote
-['remote "myremote"']
-    url = C:\dvc-storage
+    remote = dagshub
+['remote "dagshub"']
+    url = https://dagshub.com/Matthis747/document-classifier.dvc
