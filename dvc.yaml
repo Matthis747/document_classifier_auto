@@ -4,87 +4,39 @@
 stages:
   # Stage 1: Extract text from PDFs using OCR
   extract_text:
-    cmd: python -c "
-      from src.trainer import ModelTrainer;
-      import config;
-      trainer = ModelTrainer(
-        dataset_dir=config.DATASET_DIR,
-        data_dir=config.DATA_DIR,
-        models_dir=config.MODELS_DIR,
-        ocr_config=config.OCR_CONFIG,
-        tfidf_config=config.TFIDF_CONFIG,
-        svm_config=config.SVM_CONFIG,
-        max_pages=config.MAX_PAGES_PER_PDF,
-        stopwords=config.DOMAIN_STOPWORDS
-      );
-      trainer.extract_texts()
-      "
+    cmd: python -c " from src.trainer import ModelTrainer; import config; 
+      trainer = ModelTrainer( dataset_dir=config.DATASET_DIR, 
+      data_dir=config.DATA_DIR, models_dir=config.MODELS_DIR, 
+      ocr_config=config.OCR_CONFIG, tfidf_config=config.TFIDF_CONFIG, 
+      svm_config=config.SVM_CONFIG, max_pages=config.MAX_PAGES_PER_PDF, 
+      stopwords=config.DOMAIN_STOPWORDS ); trainer.extract_texts() "
     deps:
-      - data/dataset/
-      - src/ocr.py
-      - src/trainer.py
-      - config.py
+    - data/dataset/
+    - src/ocr.py
+    - src/trainer.py
+    - config.py
     outs:
-      - data/dataset_raw.pkl
-      - data/dataset_raw.csv
+    - data/dataset_raw.pkl
+    - data/dataset_raw.csv
 
   # Stage 2: Preprocess/Normalize extracted text
   preprocess:
-    cmd: python -c "
-      from src.trainer import ModelTrainer;
-      import config;
-      trainer = ModelTrainer(
-        dataset_dir=config.DATASET_DIR,
-        data_dir=config.DATA_DIR,
-        models_dir=config.MODELS_DIR,
-        ocr_config=config.OCR_CONFIG,
-        tfidf_config=config.TFIDF_CONFIG,
-        svm_config=config.SVM_CONFIG,
-        max_pages=config.MAX_PAGES_PER_PDF,
-        stopwords=config.DOMAIN_STOPWORDS
-      );
-      trainer.normalize_texts()
-      "
+    cmd: python -c " from src.trainer import ModelTrainer; import config; 
+      trainer = ModelTrainer( dataset_dir=config.DATASET_DIR, 
+      data_dir=config.DATA_DIR, models_dir=config.MODELS_DIR, 
+      ocr_config=config.OCR_CONFIG, tfidf_config=config.TFIDF_CONFIG, 
+      svm_config=config.SVM_CONFIG, max_pages=config.MAX_PAGES_PER_PDF, 
+      stopwords=config.DOMAIN_STOPWORDS ); trainer.normalize_texts() "
     deps:
-      - data/dataset_raw.pkl
-      - src/normalizer.py
-      - src/trainer.py
-      - config.py
+    - data/dataset_raw.pkl
+    - src/normalizer.py
+    - src/trainer.py
+    - config.py
     outs:
-      - data/dataset_clean.pkl
-      - data/dataset_clean.csv
+    - data/dataset_clean.pkl
+    - data/dataset_clean.csv
 
   # Stage 3: Train the model
-  train:
-    cmd: python -c "
-      from src.trainer import ModelTrainer;
-      import config;
-      trainer = ModelTrainer(
-        dataset_dir=config.DATASET_DIR,
-        data_dir=config.DATA_DIR,
-        models_dir=config.MODELS_DIR,
-        ocr_config=config.OCR_CONFIG,
-        tfidf_config=config.TFIDF_CONFIG,
-        svm_config=config.SVM_CONFIG,
-        max_pages=config.MAX_PAGES_PER_PDF,
-        test_size=config.TEST_SIZE,
-        val_size=config.VAL_SIZE,
-        stopwords=config.DOMAIN_STOPWORDS
-      );
-      trainer.train_model()
-      "
-    deps:
-      - data/dataset_clean.pkl
-      - src/trainer.py
-      - config.py
-    outs:
-      - models/svm_model.joblib
-      - models/tfidf_vectorizer.joblib
-    metrics:
-      - models/model_metadata.json:
-          cache: false
-
-  # Stage 4: Evaluate the model
   evaluate:
     cmd: >
       python -c "
@@ -95,14 +47,15 @@ stages:
       print('  Test Accuracy:', round(metadata['test_accuracy'], 4));
       print('  Test F1 Macro:', round(metadata['test_f1_macro'], 4));
       print('  Classes:', metadata['classes']);
-      print('  Samples: train=%d, val=%d, test=%d' % (metadata['n_train'], metadata['n_val'], metadata['n_test']));
+      print('  Samples: train=%d, val=%d, test=%d' % (metadata['n_train'], metadata['n_val'],
+      metadata['n_test']));
       if metadata['test_accuracy'] < 0.90:
         print('WARNING: Model accuracy below 90%!');
         exit(1)
       "
     deps:
-      - models/model_metadata.json
-      - models/svm_model.joblib
+    - models/model_metadata.json
+    - models/svm_model.joblib
 
 # Note: Parameters are defined in config.py
 # To track experiments, use: dvc exp run
