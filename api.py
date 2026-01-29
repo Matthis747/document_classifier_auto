@@ -3,9 +3,10 @@ FastAPI application for document classification.
 """
 import logging
 import tempfile
+import time
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Query
 from fastapi.responses import JSONResponse
 from typing import Optional
 from pydantic import BaseModel
@@ -13,6 +14,7 @@ from pydantic import BaseModel
 import config
 from src.classifier import DocumentClassifier
 from src.trainer import ModelTrainer
+from monitoring import get_monitoring_service, MonitoringService
 
 # Configure logging
 logging.basicConfig(
@@ -35,6 +37,9 @@ classifier = DocumentClassifier(
     max_pages=config.MAX_PAGES_PER_PDF,
     confidence_threshold=config.CONFIDENCE_THRESHOLD,
 )
+
+# Initialize monitoring service
+monitoring = get_monitoring_service()
 
 
 # =============================================================================
@@ -73,6 +78,23 @@ class ClassesResponse(BaseModel):
     n_classes: int
 
 
+class MetricsResponse(BaseModel):
+    metrics: list
+    total: int
+    limit: int
+    offset: int
+    summary: dict
+
+
+class AlertsResponse(BaseModel):
+    alerts: list
+    total: int
+    limit: int
+    offset: int
+    severity_counts: dict
+    unresolved_count: int
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -81,7 +103,12 @@ class ClassesResponse(BaseModel):
 @app.get("/", tags=["Health"])
 async def root():
     """Health check endpoint."""
-    return {"status": "ok", "message": "Document Classifier API is running"}
+    health = monitoring.get_health()
+    return {
+        "status": "ok",
+        "message": "Document Classifier API is running",
+        "monitoring": health,
+    }
 
 
 @app.get("/status", response_model=StatusResponse, tags=["Status"])
@@ -121,6 +148,10 @@ async def predict(file: UploadFile = File(...)):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
+    # Start timing
+    start_time = time.time()
+    tmp_path = None
+
     # Save uploaded file to temporary location
     try:
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
@@ -131,6 +162,19 @@ async def predict(file: UploadFile = File(...)):
         # Classify the document
         result = classifier.predict_file(tmp_path)
 
+        # Calculate processing time
+        processing_time_ms = (time.time() - start_time) * 1000
+
+        # Log prediction to monitoring
+        monitoring.log_prediction(
+            filename=file.filename,
+            predicted_class=result.get("predicted_class", "ERROR"),
+            confidence=result.get("confidence", 0.0),
+            processing_time_ms=processing_time_ms,
+            top_3=result.get("top_3", []),
+            ocr_stats=result.get("ocr_stats"),
+        )
+
         return result
 
     except FileNotFoundError as e:
@@ -140,7 +184,7 @@ async def predict(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
     finally:
         # Clean up temporary file
-        if tmp_path.exists():
+        if tmp_path and tmp_path.exists():
             tmp_path.unlink()
 
 
@@ -175,6 +219,8 @@ async def train(background_tasks: BackgroundTasks, force: bool = False):
     def run_training(force_flag: bool):
         global training_in_progress, last_training_result
         training_in_progress = True
+        start_time = time.time()
+
         try:
             trainer = ModelTrainer(
                 dataset_dir=config.DATASET_DIR,
@@ -190,9 +236,35 @@ async def train(background_tasks: BackgroundTasks, force: bool = False):
             )
             last_training_result = trainer.train(force=force_flag)
             last_training_result["status"] = "success"
+
+            # Log training metrics to monitoring
+            training_time_s = time.time() - start_time
+            training_stats = last_training_result.get("training", {})
+
+            if last_training_result.get("retrained", False):
+                monitoring.log_training(
+                    n_samples=training_stats.get("n_train", 0) + training_stats.get("n_val", 0) + training_stats.get("n_test", 0),
+                    n_classes=len(training_stats.get("classes", [])),
+                    train_accuracy=training_stats.get("val_accuracy", 0),  # Using val as proxy
+                    val_accuracy=training_stats.get("val_accuracy", 0),
+                    test_accuracy=training_stats.get("test_accuracy", 0),
+                    test_f1_macro=training_stats.get("test_f1_macro", 0),
+                    training_time_s=training_time_s,
+                    new_documents=last_training_result.get("extraction", {}).get("new_processed", 0),
+                    removed_documents=last_training_result.get("extraction", {}).get("removed", 0),
+                )
+
         except Exception as e:
             logger.error(f"Training failed: {e}")
             last_training_result = {"status": "error", "error": str(e)}
+
+            # Log training failure alert
+            monitoring.create_custom_alert(
+                alert_type="training_failed",
+                severity="critical",
+                message=f"Training failed: {str(e)}",
+                details={"error": str(e)},
+            )
         finally:
             training_in_progress = False
             # Reload classifier model
@@ -223,6 +295,59 @@ async def train_status():
         return {"status": "no_training", "message": "No training has been run yet"}
 
     return last_training_result
+
+
+# =============================================================================
+# Monitoring Endpoints
+# =============================================================================
+
+
+@app.get("/monitoring/metrics", response_model=MetricsResponse, tags=["Monitoring"])
+async def get_metrics(
+    type: Optional[str] = Query(None, description="Filter by metric type (prediction, training)"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records"),
+    offset: int = Query(0, ge=0, description="Number of records to skip"),
+):
+    """
+    Get logged metrics.
+
+    Returns prediction and training metrics with summary statistics.
+
+    - **type**: Filter by metric type (prediction, training, or omit for all)
+    - **limit**: Maximum number of records to return (default: 100, max: 1000)
+    - **offset**: Number of records to skip for pagination
+    """
+    return monitoring.get_metrics(metric_type=type, limit=limit, offset=offset)
+
+
+@app.get("/monitoring/alerts", response_model=AlertsResponse, tags=["Monitoring"])
+async def get_alerts(
+    severity: Optional[str] = Query(None, description="Filter by severity (info, warning, critical)"),
+    resolved: Optional[bool] = Query(None, description="Filter by resolved status"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records"),
+    offset: int = Query(0, ge=0, description="Number of records to skip"),
+):
+    """
+    Get logged alerts.
+
+    Returns alerts with counts by severity level.
+
+    - **severity**: Filter by severity (info, warning, critical)
+    - **resolved**: Filter by resolved status (true/false)
+    - **limit**: Maximum number of records to return (default: 100)
+    - **offset**: Number of records to skip for pagination
+    """
+    return monitoring.get_alerts(severity=severity, resolved=resolved, limit=limit, offset=offset)
+
+
+@app.get("/monitoring/health", tags=["Monitoring"])
+async def get_monitoring_health():
+    """
+    Get monitoring health status.
+
+    Returns summary of system health based on alerts and metrics.
+    """
+    return monitoring.get_health()
 
 
 # =============================================================================

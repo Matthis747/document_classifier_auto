@@ -31,7 +31,13 @@ Thumbs.db
 
 # Logs
 *.log
+monitoring/logs/*.jsonl
+!monitoring/logs/.gitkeep
 
 # Temp files
 temp/
 *.tmp
+
+# DVC
+.dvc/cache/
+.dvc/tmp/

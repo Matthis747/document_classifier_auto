@@ -1,0 +1,38 @@
+# DVC ignore file
+# Add patterns of files dvc should ignore (similar to .gitignore)
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs (managed by monitoring, not DVC)
+monitoring/logs/
+
+# Temp files
+temp/
+*.tmp
+
+# Git
+.git/
+.gitignore
+
+# DVC internals
+.dvc/

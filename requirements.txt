@@ -19,3 +19,8 @@ nltk>=3.8.0
 fastapi>=0.100.0
 uvicorn>=0.23.0
 python-multipart>=0.0.6
+
+# MLOps (optional)
+# dvc>=3.0.0  # Uncomment to use DVC
+# dvc[s3]     # For S3 remote storage
+# dvc[gs]     # For Google Cloud Storage
