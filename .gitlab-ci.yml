@@ -36,7 +36,7 @@ test_image:
     - docker run --rm $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA python -c "from src.trainer import ModelTrainer; print('✅ Trainer OK')"
     - docker run --rm $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA python -c "from src.normalizer import TextNormalizer; print('✅ Normalizer OK')"
     - docker run --rm $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA python -c "from src.ocr import OCRExtractor; print('✅ OCR OK')"
-    - docker run --rm $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA python -c "from monitoring import ModelMonitor; print('✅ Monitoring OK')"
+    - docker run --rm $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA python -c "from monitoring import MonitoringService; print('✅ Monitoring OK')"
     - docker run --rm $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA python -c "from api import app; print('✅ API OK')"
     - echo "All tests passed!"
 
@@ -48,6 +48,9 @@ deploy_to_argo:
     - echo "Image ready for deployment!"
     - echo "Registry -> $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA"
     - echo "Latest   -> $REGISTRY/$IMAGE_NAME:latest"
+    - echo "=========================================="
+    - echo "To deploy on Argo, run:"
+    - echo "  argo submit -n argo ml-workflow.yaml --watch"
     - echo "=========================================="
   only:
     - main
