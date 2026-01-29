@@ -18,8 +18,11 @@ python -m venv venv
 venv\Scripts\activate  # Windows
 # source venv/bin/activate  # Linux/Mac
 
-# Install PaddlePaddle GPU (CUDA 12.9)
+# Install PaddlePaddle (choose one)
+# GPU (CUDA 12.9):
 python -m pip install paddlepaddle-gpu==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu129/
+# CPU only:
+# python -m pip install paddlepaddle==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
 # Install other dependencies
 pip install -r requirements.txt
