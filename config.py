@@ -2,6 +2,7 @@
 Configuration for the document classifier.
 """
 from pathlib import Path
+import os
 
 # =============================================================================
 # PATHS
@@ -23,8 +24,23 @@ MODELS_DIR = BASE_DIR / "models"
 # OCR SETTINGS
 # =============================================================================
 
+def _detect_device():
+    """Auto-detect GPU availability."""
+    # Allow override via environment variable
+    env_device = os.environ.get("PADDLE_DEVICE")
+    if env_device:
+        return env_device
+
+    try:
+        import paddle
+        if paddle.device.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0:
+            return "gpu:0"
+    except Exception:
+        pass
+    return "cpu"
+
 OCR_CONFIG = {
-    "device": "gpu:0",  # Use "cpu" if no GPU available
+    "device": _detect_device(),
     "lang": "en",
     "ocr_version": "PP-OCRv5",
     "use_doc_orientation_classify": True,
