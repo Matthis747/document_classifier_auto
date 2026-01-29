@@ -9,13 +9,15 @@ venv/
 ENV/
 
 # Data files (too large for git)
-data/dataset/
+data/dataset/*
+!data/dataset/.gitkeep
 data/*.pkl
 data/*.csv
 
 # Models (too large for git)
 models/*.joblib
 models/*.json
+!models/.gitkeep
 
 # IDE
 .vscode/

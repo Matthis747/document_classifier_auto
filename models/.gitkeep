@@ -1,0 +1,2 @@
+# This file exists to preserve the folder structure in git
+# Trained model files will be saved here after running: python main.py train
