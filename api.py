@@ -2,6 +2,7 @@
 FastAPI application for document classification.
 """
 import logging
+import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -253,6 +254,17 @@ async def train(background_tasks: BackgroundTasks, force: bool = False):
                     new_documents=last_training_result.get("extraction", {}).get("new_processed", 0),
                     removed_documents=last_training_result.get("extraction", {}).get("removed", 0),
                 )
+
+            # Version models with DVC after training
+            if last_training_result.get("retrained", False):
+                try:
+                    subprocess.run(["dvc", "add", "models"], check=True)
+                    subprocess.run(["dvc", "push"], check=True)
+                    logger.info("Models versioned and pushed with DVC")
+                    last_training_result["dvc_versioned"] = True
+                except Exception as dvc_err:
+                    logger.warning(f"DVC versioning failed: {dvc_err}")
+                    last_training_result["dvc_versioned"] = False
 
         except Exception as e:
             logger.error(f"Training failed: {e}")

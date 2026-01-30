@@ -41,3 +41,4 @@ temp/
 # DVC
 .dvc/cache/
 .dvc/tmp/
+/models

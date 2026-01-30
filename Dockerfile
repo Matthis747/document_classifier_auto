@@ -5,6 +5,9 @@ FROM 192.168.49.2:5000/doc-classifier-base:latest
 
 WORKDIR /app
 
+# Install DVC
+RUN pip install dvc --break-system-packages
+
 # Copy source code
 COPY . .
 
