@@ -1,5 +1,5 @@
 # GitLab CI/CD Pipeline for Document Classifier
-# Stages: build → test → deploy
+# With DVC integration (DagsHub)
 
 image: docker:19
 
@@ -10,47 +10,97 @@ variables:
 
 stages:
   - build
+  - train
   - test
   - deploy
 
-# Build and push Docker image
+# ============================================
+# Stage 1: Build Docker image
+# ============================================
 build_image:
   stage: build
   script:
+    - echo "=========================================="
     - echo "Building Docker image..."
+    - echo "=========================================="
     - docker build -t $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
     - docker tag $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA $REGISTRY/$IMAGE_NAME:latest
     - echo "Pushing to registry..."
     - docker push $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA
     - docker push $REGISTRY/$IMAGE_NAME:latest
-    - echo "Build complete!"
+    - echo "✅ Build complete!"
 
-# Test the image
+# ============================================
+# Stage 2: Pull data from DagsHub and train
+# ============================================
+train_model:
+  stage: train
+  script:
+    - echo "=========================================="
+    - echo "Training model with DVC..."
+    - echo "=========================================="
+    # Configure DVC credentials and pull data
+    - |
+      docker run --rm \
+        $REGISTRY/$IMAGE_NAME:latest \
+        sh -c "
+          echo 'Configuring DVC credentials...'
+          dvc remote modify dagshub --local auth basic
+          dvc remote modify dagshub --local user $DAGSHUB_USER
+          dvc remote modify dagshub --local password $DAGSHUB_TOKEN
+          
+          echo 'Pulling data from DagsHub...'
+          dvc pull
+          
+          echo 'Training model...'
+          python main.py train
+          
+          echo 'Versioning new model with DVC...'
+          dvc add models
+          
+          echo 'Pushing model to DagsHub...'
+          dvc push
+          
+          echo '✅ Training complete!'
+        "
+  allow_failure: true
+
+# ============================================
+# Stage 3: Test imports
+# ============================================
 test_image:
   stage: test
   script:
-    - echo "Pulling image for testing..."
-    - docker pull $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+    - echo "=========================================="
     - echo "Testing imports..."
-    - docker run --rm $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA python -c "from src.classifier import DocumentClassifier; print('✅ Classifier OK')"
-    - docker run --rm $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA python -c "from src.trainer import ModelTrainer; print('✅ Trainer OK')"
-    - docker run --rm $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA python -c "from src.normalizer import TextNormalizer; print('✅ Normalizer OK')"
-    - docker run --rm $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA python -c "from src.ocr import OCRExtractor; print('✅ OCR OK')"
-    - docker run --rm $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA python -c "from monitoring import MonitoringService; print('✅ Monitoring OK')"
-    - docker run --rm $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA python -c "from api import app; print('✅ API OK')"
-    - echo "All tests passed!"
+    - echo "=========================================="
+    - docker run --rm $REGISTRY/$IMAGE_NAME:latest python -c "from src.classifier import DocumentClassifier; print('✅ Classifier OK')"
+    - docker run --rm $REGISTRY/$IMAGE_NAME:latest python -c "from src.trainer import ModelTrainer; print('✅ Trainer OK')"
+    - docker run --rm $REGISTRY/$IMAGE_NAME:latest python -c "from src.normalizer import TextNormalizer; print('✅ Normalizer OK')"
+    - docker run --rm $REGISTRY/$IMAGE_NAME:latest python -c "from src.ocr import OCRExtractor; print('✅ OCR OK')"
+    - docker run --rm $REGISTRY/$IMAGE_NAME:latest python -c "from monitoring import MonitoringService; print('✅ Monitoring OK')"
+    - docker run --rm $REGISTRY/$IMAGE_NAME:latest python -c "from api import app; print('✅ API OK')"
+    - echo "✅ All tests passed!"
 
-# Deploy notification
+# ============================================
+# Stage 4: Deploy notification
+# ============================================
 deploy_to_argo:
   stage: deploy
   script:
     - echo "=========================================="
-    - echo "Image ready for deployment!"
+    - echo "✅ Image ready for deployment!"
+    - echo "=========================================="
     - echo "Registry -> $REGISTRY/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA"
     - echo "Latest   -> $REGISTRY/$IMAGE_NAME:latest"
-    - echo "=========================================="
-    - echo "To deploy on Argo, run:"
-    - echo "  argo submit -n argo ml-workflow.yaml --watch"
+    - echo ""
+    - echo "To deploy the API in k8s-argo:"
+    - echo "  1. minikube ssh"
+    - echo "     docker pull localhost:5000/document-classifier:latest"
+    - echo "     docker tag localhost:5000/document-classifier:latest document-classifier:latest"
+    - echo "     exit"
+    - echo "  2. kubectl apply -f /root/k8s-deployment.yaml"
+    - echo "  3. kubectl port-forward --address='0.0.0.0' service/document-classifier-service 8080:8080 &"
     - echo "=========================================="
   only:
     - main

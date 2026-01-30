@@ -1,5 +1,5 @@
 # Dockerfile for Document Classifier
-# Uses pre-built base image with all dependencies
+# With DVC support for DagsHub
 
 FROM 192.168.49.2:5000/doc-classifier-base:latest
 
@@ -8,7 +8,7 @@ WORKDIR /app
 # Install DVC
 RUN pip install dvc --break-system-packages
 
-# Copy source code
+# Copy source code and DVC config
 COPY . .
 
 # Create necessary directories
